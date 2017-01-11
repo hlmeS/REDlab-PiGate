@@ -17,6 +17,7 @@ An SSH tunnel is used to read and write data to and from a central database.
 
 Modifications:
 ==============
+1/10/17: Updated the script to add nodes to the nodes_config table if queries are empty. 
 
 Credits
 =======
@@ -94,34 +95,11 @@ def ssh_to_db(node_mac, temp, valvePos):
 
 def ssh_new_node(node):
     """ Append node to the list. 
-        It is up to the user to add it to the database
-	if it's not there yet. 
 	The user needs to change default configuration in the DB.
     """
     mac_addr.append(node)
-    
-    """ Query DB to get parameter 
-    """
-    ssh_from_db(node)
-    
-    if not tempSet.has_key(node):
-        """ Make up config parameters and add to DB
-	"""
-	tempSet[node] = 75.0
-	valveLim[node] = 1023
-	DR[node] = 1
-	pGain[node] = 0.05
-	iGain[node] = 0.01
-	
-	COMMAND = 'PGPASSWORD=' + str(db_pass)
-	COMMAND += ' psql -U ' + str(db_usr)
-	COMMAND += ' -d ' + str(db_name)
-	COMMAND += ' -h 127.0.0.1 -c '
-	COMMAND += '"Insert INTO nodes_config (node_mac, tempset, valveLim, pgain, igain, dr) VALUES ('
-	COMMAND += "'"+str(node)+"'" + ', ' + str(tempSet[node]) + ',' + str(valveLim[node]) + ', '
-	COMMAND += str(DR[node]) + ',' + str(pGain[node]) + ',' + str(iGain[node]) +')" '
+    ssh_from_db(node) 
 
- 	
 
 def ssh_from_db(node):
     """ SSH and get configuration (DR parameters) from
@@ -148,7 +126,25 @@ def ssh_from_db(node):
             DR[node] = int(m[4])
 	    if SER_DEBUG: print 'Node: ' + node + ' T: ' + str(tempSet[node]) + ' V: ' + str(valveLim[node]), 
 	    if SER_DEBUG: print ' pG: ' + str(pGain[node]) + ' iG: ' + str(iGain[node]) + ' DR: ' + str(DR[node])
-        time.sleep(5)
+
+
+	else:
+	    if SER_DEBUG: print 'adding node to the nodes_config DB table'
+	    COMMAND = 'PGPASSWORD=' + str(db_pass)
+            COMMAND += ' psql -U ' + str(db_usr)
+            COMMAND += ' -d ' + str(db_name)
+            COMMAND += ' -h 127.0.0.1 -c '
+            COMMAND += '"Insert INTO nodes_config (node_mac, tempset, valveLim, pgain, igain, dr) VALUES ('
+            COMMAND += "'"+str(node)+"'" + ', 75.0, 1023, 0.05, 0.01, 1)" '
+
+            try:
+                ssh.exec_command(COMMAND)
+            except socket.error as e:
+                init_ssh()
+
+	# update time for DR configuration parameters
+	time.sleep(5) 
+    
     except socket.error as e:
         init_ssh()
 
